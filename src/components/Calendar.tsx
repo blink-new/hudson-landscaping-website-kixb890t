@@ -8,6 +8,7 @@ import { Textarea } from './ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Calendar as CalendarIcon, DollarSign } from 'lucide-react'
 import { useToast } from '../hooks/use-toast'
+import { blink } from '../blink/client'
 
 interface CalendarProps {
   user: { id: string; email: string } | null
@@ -113,8 +114,23 @@ const Calendar: React.FC<CalendarProps> = ({ user }) => {
     setLoading(true)
 
     try {
-      // Here we would normally save to database
-      // For now, just show success message
+      // Create appointment in database
+      await blink.db.appointments.create({
+        id: `appt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        userId: user.id,
+        customerEmail: user.email,
+        date: selectedDate,
+        time: selectedTime,
+        service: selectedService || null,
+        packageId: selectedPackage || null,
+        hours: selectedService ? hours : null,
+        people: selectedService ? people : null,
+        price: calculatePrice(),
+        notes: notes || null,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      })
+
       toast({
         title: "Appointment booked!",
         description: `Your appointment has been scheduled for ${selectedDate} at ${selectedTime}.`,
@@ -129,7 +145,8 @@ const Calendar: React.FC<CalendarProps> = ({ user }) => {
       setPeople(1)
       setNotes('')
       
-    } catch {
+    } catch (error) {
+      console.error('Error booking appointment:', error)
       toast({
         title: "Error",
         description: "Failed to book appointment. Please try again.",

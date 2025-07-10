@@ -5,7 +5,7 @@ import { Leaf, Phone, Mail, LogOut, User, Calendar } from 'lucide-react'
 import { blink } from '../blink/client'
 
 interface HeaderProps {
-  user: any
+  user: { id: string; email: string } | null
   onLogin: () => void
 }
 

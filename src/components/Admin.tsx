@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -15,44 +15,95 @@ import {
   Trash2,
   Plus
 } from 'lucide-react'
+import { blink } from '../blink/client'
+import { useToast } from '../hooks/use-toast'
 
 interface AdminProps {
-  user: any
+  user: { id: string; email: string } | null
+}
+
+interface Appointment {
+  id: string
+  date: string
+  time: string
+  customerEmail: string
+  service?: string
+  packageId?: string
+  status: string
+  price: number
+  notes?: string
 }
 
 const Admin: React.FC<AdminProps> = ({ user }) => {
   const [adminPassword, setAdminPassword] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
 
-  // Mock appointments data
-  const [appointments] = useState([
-    {
-      id: '1',
-      date: '2024-01-15',
-      time: '10:00 AM',
-      customer: 'john@example.com',
-      service: 'Lawn Mowing',
-      status: 'confirmed',
-      price: 160
-    },
-    {
-      id: '2',
-      date: '2024-01-16',
-      time: '2:00 PM',
-      customer: 'jane@example.com',
-      service: 'Snow Removal',
-      status: 'pending',
-      price: 200
+  // Load appointments when authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      loadAppointments()
     }
-  ])
+  }, [isAuthenticated, user])
+
+  const loadAppointments = async () => {
+    setLoading(true)
+    try {
+      const data = await blink.db.appointments.list({
+        orderBy: { createdAt: 'desc' },
+        limit: 50
+      })
+      setAppointments(data)
+    } catch (error) {
+      console.error('Error loading appointments:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to load appointments.',
+        variant: 'destructive'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleAdminLogin = () => {
     // Simple admin authentication (in production, this would be more secure)
     if (adminPassword === 'admin123') {
       setIsAuthenticated(true)
     } else {
-      alert('Invalid admin password')
+      toast({
+        title: 'Invalid Password',
+        description: 'Please enter the correct admin password.',
+        variant: 'destructive'
+      })
     }
+  }
+
+  const getPackageName = (packageId: string) => {
+    const packages: Record<string, string> = {
+      'year-round-complete': 'Year-Round Complete Care',
+      'seasonal-maintenance': 'Seasonal Maintenance Package',
+      'snow-season-premium': 'Snow Season Premium',
+      'lawn-perfection': 'Lawn Perfection Package',
+      'landscape-design-build': 'Landscape Design & Build',
+      'spring-summer-combo': 'Spring & Summer Combo',
+      'commercial-grounds': 'Commercial Grounds Care',
+      'weekend-warrior': 'Weekend Warrior Package',
+      'eco-friendly-care': 'Eco-Friendly Care Package',
+      'holiday-ready': 'Holiday Ready Package'
+    }
+    return packages[packageId] || packageId
+  }
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   if (!user) {
@@ -142,36 +193,53 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {appointments.map((appointment) => (
-                    <div key={appointment.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-4">
-                          <div>
-                            <p className="font-medium">{appointment.service}</p>
-                            <p className="text-sm text-gray-600">{appointment.customer}</p>
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <p className="text-gray-600 mt-2">Loading appointments...</p>
+                  </div>
+                ) : appointments.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No appointments yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {appointments.map((appointment) => (
+                      <div key={appointment.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-4">
+                            <div>
+                              <p className="font-medium">
+                                {appointment.service || getPackageName(appointment.packageId || '')}
+                              </p>
+                              <p className="text-sm text-gray-600">{appointment.customerEmail}</p>
+                              {appointment.notes && (
+                                <p className="text-xs text-gray-500 mt-1">{appointment.notes}</p>
+                              )}
+                            </div>
+                            <Badge variant={appointment.status === 'confirmed' ? 'default' : 'secondary'}>
+                              {appointment.status}
+                            </Badge>
                           </div>
-                          <Badge variant={appointment.status === 'confirmed' ? 'default' : 'secondary'}>
-                            {appointment.status}
-                          </Badge>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium">{formatDate(appointment.date)}</p>
+                          <p className="text-sm text-gray-600">{appointment.time}</p>
+                          <p className="text-sm font-medium text-green-600">${appointment.price}</p>
+                        </div>
+                        <div className="flex space-x-2 ml-4">
+                          <Button size="sm" variant="outline">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button size="sm" variant="outline">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-medium">{appointment.date}</p>
-                        <p className="text-sm text-gray-600">{appointment.time}</p>
-                        <p className="text-sm font-medium text-green-600">${appointment.price}</p>
-                      </div>
-                      <div className="flex space-x-2 ml-4">
-                        <Button size="sm" variant="outline">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
